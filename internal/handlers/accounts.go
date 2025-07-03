@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -19,6 +20,7 @@ type AccountsHandler struct {
 	Supervisor   *supervisor.Supervisor
 	AccountStore store.AccountStore
 	OTPStore     store.OTPStore
+	Mail         *dependencies.MailSingleton
 }
 
 func NewAccountsHandler(su *supervisor.Supervisor) *AccountsHandler {
@@ -28,6 +30,7 @@ func NewAccountsHandler(su *supervisor.Supervisor) *AccountsHandler {
 		Supervisor:   su,
 		AccountStore: store.NewSQLiteAccountStore(sqlite.DB),
 		OTPStore:     store.NewSQLiteOTPStore(sqlite.DB),
+		Mail:         dependencies.MustGetMail(su),
 	}
 }
 
@@ -59,5 +62,17 @@ func (h *AccountsHandler) Register(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).SendString("Failed to initate OTP")
 	}
 
-	return c.JSON(otp)
+	go func(acc *schemas.Account, otp *schemas.OTP) {
+		err := h.Mail.SendMail(acc.EmailID, fmt.Sprintf("Your OTP for Nybl is %s", otp.Code), "", fmt.Sprintf("<p>Hello <b>%s</b>! Please verify your email, <b>%s</b> using the One Time Password below.</p> <br><h3><b>%s</b></h3><br>DO NOT SHARE THIS CODE WITH ANYONE", acc.Name, acc.EmailID, otp.Code))
+
+		if err != nil {
+			slog.Error("Failed to send OTP", "account_id", acc.ID, "error", err)
+		}
+	}(acc, otp)
+
+	res := schemas.NewOkResponse(map[string]interface{}{
+		"acc":  acc,
+		"next": "Verify email",
+	})
+	return c.JSON(res)
 }

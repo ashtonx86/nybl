@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/ashtonx86/nybl/internal/supervisor"
 	gomail "gopkg.in/mail.v2"
 )
 
@@ -38,6 +39,8 @@ func NewMailSingleton() *MailSingleton {
 	}
 
 	dialer := gomail.NewDialer(host, portInt, username, password)
+
+	fmt.Println(dialer)
 	return &MailSingleton{
 		Dialer: dialer,
 	}
@@ -50,12 +53,13 @@ func (s *MailSingleton) Init(ctx context.Context) error {
 func (s *MailSingleton) Stop(ctx context.Context) error {
 	return nil
 }
-func (s *MailSingleton) SendMail(from string, to string, subject string, style string, body string) error {
+func (s *MailSingleton) SendMail(to string, subject string, style string, body string) error {
+	from := os.Getenv("EMAIL_SMTP_USERNAME")
 	message := gomail.NewMessage()
 
-	message.SetHeader("from", from)
-	message.SetHeader("to", to)
-	message.SetHeader("subject", subject)
+	message.SetHeader("From", from)
+	message.SetHeader("To", to)
+	message.SetHeader("Subject", subject)
 
 	message.SetBody("text/html", s.MakeEmailHTML(style, body))
 
@@ -64,4 +68,14 @@ func (s *MailSingleton) SendMail(from string, to string, subject string, style s
 
 func (s *MailSingleton) MakeEmailHTML(style string, body string) string {
 	return fmt.Sprintf(BasicTemplate, style, body)
+}
+
+func MustGetMail(su *supervisor.Supervisor) *MailSingleton {
+	mail, ok := supervisor.GetSingletonAs[*MailSingleton](su, "email")
+
+	if !ok {
+		panic("Missing required dependency: email (MailSingleton) -- dependency is not registered")
+	}
+
+	return mail
 }

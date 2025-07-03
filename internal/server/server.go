@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/Auden747/nybl/internal/dependencies"
-	"github.com/Auden747/nybl/internal/routes"
-	"github.com/Auden747/nybl/internal/supervisor"
+	"github.com/ashtonx86/nybl/internal/dependencies"
+	"github.com/ashtonx86/nybl/internal/routes"
+	"github.com/ashtonx86/nybl/internal/supervisor"
 	"github.com/gofiber/fiber/v2"
 )
 
