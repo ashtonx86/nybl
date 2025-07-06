@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/ashtonx86/nybl/internal/dependencies"
+	"github.com/ashtonx86/nybl/internal/diabeticerrors"
 	"github.com/ashtonx86/nybl/internal/schemas"
 	"github.com/ashtonx86/nybl/internal/store"
 	"github.com/ashtonx86/nybl/internal/supervisor"
@@ -52,14 +54,21 @@ func (h *AccountsHandler) Register(c *fiber.Ctx) error {
 
 	acc, err := h.AccountStore.Create(ctx, body.Name, body.EmailID)
 	if err != nil {
-		slog.Error("Failed to create new account", "err", err)
-		return c.Status(fiber.StatusInternalServerError).SendString("Failed")
+		var diabeticErr diabeticerrors.DataError
+		if errors.As(err, &diabeticErr) {
+			if diabeticErr.Code == diabeticerrors.ALREADY_EXISTS {
+				return  c.Status(fiber.StatusConflict).JSON(schemas.NewErrResponse("Already exists"))
+			}
+		} else {
+			slog.Error("accounts.go :: func Register :: Encountered an error that has not been explicitly defined while registering a user", "email", body.EmailID, "error", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(schemas.NewErrResponse("Something went wrong"))
+		}
 	}
 
 	otp, err := h.OTPStore.Create(ctx, acc.EmailID, acc.ID)
 	if err != nil {
 		slog.Error("Failed to create OTP for account", "accountID", acc.ID, "error", err)
-		return c.Status(fiber.StatusInternalServerError).SendString("Failed to initate OTP")
+		return c.Status(fiber.StatusInternalServerError).JSON(schemas.NewErrResponse("Failed to initiate OTP, please try again later."))
 	}
 
 	go func(acc *schemas.Account, otp *schemas.OTP) {

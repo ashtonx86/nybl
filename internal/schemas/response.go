@@ -19,3 +19,13 @@ func NewOkResponse(d interface{}) Response {
 		Time: time.Now(),
 	}
 }
+
+func NewErrResponse(errMsg string) Response {
+	return Response{
+		Ok: false,
+		Error: errMsg,
+		D: nil,
+		
+		Time: time.Now(),
+	}
+}

@@ -3,11 +3,13 @@ package store
 import (
 	"context"
 	"database/sql"
-	"log"
+	"errors"
 	"time"
 
+	"github.com/ashtonx86/nybl/internal/diabeticerrors"
 	"github.com/ashtonx86/nybl/internal/schemas"
 	"github.com/google/uuid"
+	"github.com/mattn/go-sqlite3"
 )
 
 type AccountStore interface {
@@ -24,19 +26,16 @@ type SQLiteAccountStore struct {
 }
 
 func NewSQLiteAccountStore(db *sql.DB) *SQLiteAccountStore {
-	log.Print("sqlite account store created, db: ", db)
 	return &SQLiteAccountStore{
 		DB: db,
 	}
 }
-
-func (s *SQLiteAccountStore) Create(ctx context.Context, name string, emailID string) (*schemas.Account, error) {
+func (s *SQLiteAccountStore) Create(ctx context.Context, name string, emailID string) (account *schemas.Account, err error) {
 	id := uuid.NewString()
 
 	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelDefault,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -55,18 +54,21 @@ func (s *SQLiteAccountStore) Create(ctx context.Context, name string, emailID st
 	`
 
 	timeNow := time.Now()
-
 	_, err = tx.ExecContext(ctx, stmt, id, name, emailID, false, timeNow, timeNow)
-	if err != nil {
+
+	var sqliteErr sqlite3.Error
+	if err != nil && errors.As(err, &sqliteErr) {
+		if sqliteErr.Code == sqlite3.ErrConstraint && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+			return nil, diabeticerrors.AlreadyExistsError("sqlite", err)
+		}
 		return nil, err
 	}
 
-	account := &schemas.Account{
-		ID:       id,
-		Name:     name,
-		EmailID:  emailID,
-		Verified: false,
-
+	account = &schemas.Account{
+		ID:        id,
+		Name:      name,
+		EmailID:   emailID,
+		Verified:  false,
 		CreatedAt: timeNow,
 		UpdatedAt: timeNow,
 	}
